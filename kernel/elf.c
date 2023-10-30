@@ -8,6 +8,10 @@
 #include "riscv.h"
 #include "spike_interface/spike_utils.h"
 
+elf_symbol symbols[64];
+char sym_names[64][32];
+int sym_count;
+
 typedef struct elf_info_t {
   spike_file_t *f;
   process *p;
@@ -101,6 +105,48 @@ static size_t parse_args(arg_buf *arg_bug_msg) {
   return pk_argc - arg;
 }
 
+void load_func_name(elf_ctx* ctx){
+    // 先找到这个section header 字符串表，并把其中所有section的名字读出来
+    elf_section_header sh_str;
+    elf_fpread(ctx,(void*)&sh_str,sizeof(sh_str),ctx->ehdr.shoff + ctx->ehdr.shstrndx * sizeof(elf_section_header));
+    char section_name[sh_str.sh_size];
+    // sprint("%d\n",sh_str.sh_size);
+    elf_fpread(ctx,section_name,sh_str.sh_size,sh_str.sh_offset);
+//    for(int i = 0;i < sh_str.sh_size;i++)
+//        sprint("%c",section_name[i]);
+//    sprint("\n");
+
+    //找到.symtab和.strtab的header
+    elf_section_header sh_symtab;
+    elf_section_header sh_strtab;
+    for(uint16 i = 0;i < ctx->ehdr.shnum;i++){
+        uint64 shoff = ctx->ehdr.shoff + i * sizeof(elf_section_header);
+        elf_section_header sh_tmp;
+        elf_fpread(ctx,&sh_tmp,sizeof(sh_tmp),shoff);
+        if(strcmp(section_name + sh_tmp.sh_name,".symtab") == 0){
+            sh_symtab = sh_tmp;
+        }else if(strcmp(section_name + sh_tmp.sh_name,".strtab") == 0){
+            sh_strtab = sh_tmp;
+        }
+    }
+
+    //读出symtab中所有函数的symbol和name，并记录数量
+    uint64 symnum = sh_symtab.sh_size / sizeof(elf_symbol);
+    int i;
+    int count = 0;
+    elf_symbol symbol_tmp;
+    for(i = 0;i < symnum;i++){
+        elf_fpread(ctx,&symbol_tmp,sizeof(symbol_tmp),sh_symtab.sh_offset + i * sizeof(elf_symbol));
+        if(symbol_tmp.st_info == 18){
+            elf_fpread(ctx,sym_names[count],sizeof(sym_names[count]),sh_strtab.sh_offset + symbol_tmp.st_name);
+            symbols[count] = symbol_tmp;
+//            sprint("%s\n",sym_names[count]);
+            count++;
+        }
+    }
+    sym_count = count;
+}
+
 //
 // load the elf of user application, by using the spike file interface.
 //
@@ -129,6 +175,9 @@ void load_bincode_from_host_elf(process *p) {
 
   // load elf. elf_load() is defined above.
   if (elf_load(&elfloader) != EL_OK) panic("Fail on loading elf.\n");
+
+  // load func name
+  load_func_name(&elfloader);
 
   // entry (virtual, also physical in lab1_x) address
   p->trapframe->epc = elfloader.ehdr.entry;

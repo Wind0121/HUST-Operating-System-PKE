@@ -10,8 +10,13 @@
 #include "string.h"
 #include "process.h"
 #include "util/functions.h"
+#include "elf.h"
 
 #include "spike_interface/spike_utils.h"
+
+extern elf_symbol symbols[64];
+extern char sym_names[64][32];
+extern int sym_count;
 
 //
 // implement the SYS_user_print syscall
@@ -31,11 +36,24 @@ ssize_t sys_user_exit(uint64 code) {
   shutdown(code);
 }
 
+//返回0表示还没到头，返回1表示已经找到了main
+ssize_t find_func_name(uint64 fp){
+    fp = *(uint64*)(fp - 8);
+    for(int i = 0;i < sym_count;i++){
+        if(fp >= symbols[i].st_value && fp < symbols[i].st_value + symbols[i].st_size){
+            sprint("%s\n",sym_names[i]);
+            if(strcmp(sym_names[i],"main") == 0) return 1;
+            else return 0;
+        }
+    }
+    return 0;
+}
+
 ssize_t sys_user_print_backtrace(uint64 n){
     uint64 fp = current->trapframe->regs.s0;
     fp = *((uint64*)(fp - 8));
     for(int i = 0;i < n;i++){
-        sprint("%p\n",*(uint64*)(fp - 8));
+        if(find_func_name(fp)) return 0;
         fp = *((uint64*)(fp - 16));
     }
     return 0;

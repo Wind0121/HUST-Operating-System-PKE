@@ -231,13 +231,9 @@ int do_fork( process* parent)
         // address region of child to the physical pages that actually store the code
         // segment of parent process.
         // DO NOT COPY THE PHYSICAL PAGES, JUST MAP THEM.
-        uint64 child_va = parent->mapped_info[i].va;
-        for(int i = 0;i < parent->mapped_info[i].npages;i++){
-            user_vm_map((pagetable_t)child->pagetable,child_va,PGSIZE,
-                        lookup_pa(parent->pagetable,child_va),
+        user_vm_map((pagetable_t)child->pagetable,parent->mapped_info[i].va,PGSIZE * parent->mapped_info[i].npages,
+                        lookup_pa(parent->pagetable,parent->mapped_info[i].va),
                         prot_to_type(PROT_READ | PROT_EXEC,1));
-            child_va += PGSIZE;
-        }
         sprint("do_fork map code segment at pa:%p of parent to child at va:%p.\n", lookup_pa(parent->pagetable,parent->mapped_info[i].va),
                parent->mapped_info[i].va);
 

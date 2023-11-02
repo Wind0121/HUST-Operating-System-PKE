@@ -7,6 +7,8 @@
 #define TIME_SLICE_LEN  2
 
 void insert_to_ready_queue( process* proc );
+void insert_to_block_queue( process* proc);
+void remove_block_and_insert(process* parent);
 void schedule();
 
 #endif

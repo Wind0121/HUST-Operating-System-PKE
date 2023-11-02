@@ -35,6 +35,7 @@ ssize_t sys_user_exit(uint64 code) {
   sprint("User exit with code:%d.\n", code);
   // reclaim the current process, and reschedule. added @lab3_1
   free_process( current );
+  remove_block_and_insert(current);
   schedule();
   return 0;
 }
@@ -96,7 +97,7 @@ ssize_t sys_user_yield() {
 }
 
 ssize_t sys_user_wait(uint64 pid){
-    return -1;
+    return do_wait((int)pid);
 }
 
 //

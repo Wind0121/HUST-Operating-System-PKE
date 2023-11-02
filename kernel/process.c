@@ -244,6 +244,22 @@ int do_fork( process* parent)
         child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
         child->total_mapped_region++;
         break;
+        case DATA_SEGMENT:
+            for( int j=0; j<parent->mapped_info[i].npages; j++ ){
+                uint64 addr = lookup_pa(parent->pagetable, parent->mapped_info[i].va+j*PGSIZE);
+                char *newaddr = alloc_page();
+                memcpy(newaddr, (void *)addr, PGSIZE);
+                map_pages(child->pagetable, parent->mapped_info[i].va+j*PGSIZE, PGSIZE,
+                          (uint64)newaddr, prot_to_type(PROT_WRITE | PROT_READ, 1));
+            }
+
+            // after mapping, register the vm region (do not delete codes below!)
+            child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+            child->mapped_info[child->total_mapped_region].npages =
+                    parent->mapped_info[i].npages;
+            child->mapped_info[child->total_mapped_region].seg_type = DATA_SEGMENT;
+            child->total_mapped_region++;
+            break;
     }
   }
 
@@ -254,3 +270,38 @@ int do_fork( process* parent)
 
   return child->pid;
 }
+
+int do_wait(int pid)
+{
+    if(pid >= NPROC || (pid < 0 && pid != -1)) return -1;
+    if(pid >= 0 && procs[pid].parent != current) return -1;
+    if(pid >=0 && procs[pid].parent == current){
+        if(procs[pid].status == ZOMBIE){
+            procs[pid].status = FREE;
+            return pid;
+        }else{
+            insert_to_block_queue(current);
+            schedule();
+            return -1;
+        }
+    }
+    if(pid == -1){
+        int havekid = 0;
+        for(int i = 0;i < NPROC;i++)
+            if(procs[i].parent == current){
+                havekid = 1;
+                if(procs[i].status == ZOMBIE){
+                    procs[i].status = FREE;
+                    return i;
+                }
+            }
+        if(havekid){
+            insert_to_block_queue(current);
+            schedule();
+            return -1;
+        }
+    }
+    return -1;
+}
+
+

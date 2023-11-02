@@ -6,6 +6,7 @@
 #include "spike_interface/spike_utils.h"
 
 process* ready_queue_head = NULL;
+process* block_queue_head = NULL;
 
 //
 // insert a process, proc, into the END of ready queue.
@@ -33,6 +34,52 @@ void insert_to_ready_queue( process* proc ) {
   proc->queue_next = NULL;
 
   return;
+}
+
+void insert_to_block_queue(process* proc){
+//    sprint( "going to insert process %d to block queue.\n", proc->pid );
+    // if the queue is empty in the beginning
+    if( block_queue_head == NULL ){
+        proc->status = BLOCKED;
+        proc->queue_next = NULL;
+        block_queue_head = proc;
+        return;
+    }
+
+    // ready queue is not empty
+    process *p;
+    // browse the ready queue to see if proc is already in-queue
+    for( p=block_queue_head; p->queue_next!=NULL; p=p->queue_next )
+        if( p == proc ) return;  //already in queue
+
+    // p points to the last element of the ready queue
+    if( p==proc ) return;
+    p->queue_next = proc;
+    proc->status = BLOCKED;
+    proc->queue_next = NULL;
+
+    return;
+}
+
+void remove_block_and_insert(process* proc){
+    process* wakeup = NULL;
+    process* p;
+    if(block_queue_head == NULL) return;
+    if(block_queue_head == proc->parent){
+        wakeup = block_queue_head;
+        block_queue_head = block_queue_head->queue_next;
+        wakeup->status = READY;
+        insert_to_ready_queue(wakeup);
+        return;
+    }
+    for( p=block_queue_head; p->queue_next!=NULL; p=p->queue_next )
+        if( p->queue_next == proc->parent ) {
+            wakeup = p->queue_next;
+            p->queue_next = p->queue_next->queue_next;
+            wakeup->status = READY;
+            insert_to_ready_queue(wakeup);
+            return;
+        }
 }
 
 //

@@ -101,7 +101,21 @@ ssize_t sys_user_yield() {
 //
 ssize_t sys_user_open(char *pathva, int flags) {
   char* pathpa = (char*)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
-  return do_open(pathpa, flags);
+  char path[30];
+  if(pathpa[0] == '.' && pathpa[1] == '/'){
+      path[0] = '/';
+      strcat(path,current->pfiles->cwd->name);
+      strcat(path,pathpa + 1);
+  }else if(pathpa[0] == '.' && pathpa[1] == '.'){
+      path[0] = '/';
+      strcat(path,current->pfiles->cwd->parent->name);
+      if(pathpa[2] == '/'){
+          strcat(path,pathpa + 3);
+      }
+  }else{
+      strcpy(path,pathpa);
+  }
+  return do_open(path, flags);
 }
 
 //
@@ -214,6 +228,37 @@ ssize_t sys_user_unlink(char * vfn){
   return do_unlink(pfn);
 }
 
+ssize_t sys_user_rcwd(char* pathva){
+    char path[30];
+    memset(path,0,sizeof(path));
+    if(current->pfiles->cwd->name[0] != '/') path[0] = '/';
+    strcat(path,current->pfiles->cwd->name);
+    strcpy(user_va_to_pa(current->pagetable,(void*)pathva),path);
+    return 0;
+}
+
+ssize_t sys_user_ccwd(char* pathva){
+    char * pathpa = (char*)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+    char path[30];
+    if(pathpa[0] == '.' && pathpa[1] == '/'){
+        strcpy(path,pathpa + 2);
+        current->pfiles->cwd = hash_get_dentry(current->pfiles->cwd,path);
+    }else if(pathpa[0] == '.' && pathpa[1] == '.'){
+        current->pfiles->cwd = current->pfiles->cwd->parent;
+        if(pathpa[2] == '/'){
+            strcpy(path,pathpa + 3);
+            current->pfiles->cwd = hash_get_dentry(current->pfiles->cwd,path);
+        }
+    }else{
+        if(pathpa[0] == '/')
+            strcpy(path,pathpa + 1);
+        else
+            strcpy(path,pathpa);
+        current->pfiles->cwd = hash_get_dentry(current->pfiles->cwd,path);
+    }
+    return 0;
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -262,6 +307,10 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_link((char *)a1, (char *)a2);
     case SYS_user_unlink:
       return sys_user_unlink((char *)a1);
+      case SYS_user_rcwd:
+          return sys_user_rcwd((char *)a1);
+      case SYS_user_ccwd:
+          return sys_user_ccwd((char *)a1);
     default:
       panic("Unknown syscall %ld \n", a0);
   }
